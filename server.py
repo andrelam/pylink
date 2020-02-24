@@ -1,6 +1,52 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from io import BytesIO
 import urllib
+import config as cfg
+import sqlite3
+from sqlite3 import Error
+import contextlib
+
+
+def create_connection(db_file):
+    """ create a database connection to a SQLite database """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+        return conn
+    except Error as e:
+        print(e)
+    return conn
+
+def create_table(conn, create_table_sql):
+    """ create a table from the create_table_sql statement
+    :param conn: Connection object
+    :param create_table_sql: a CREATE TABLE statement
+    :return:
+    """
+    try:
+        c = conn.cursor()
+        c.execute(create_table_sql)
+    except Error as e:
+        print(e)
+
+def init_db():
+    database = cfg.pylink_db
+    sql_create_links = """ CREATE TABLE IF NOT EXISTS links (
+                                 id integer PRIMARY KEY,
+                                 link text NOT NULL,
+                                 description text
+                           ); """
+
+    conn = create_connection(database)
+    if conn is not None:
+        create_table(conn, sql_create_links)
+        return conn
+    else:
+        print("Error! Cannot initialize database")
+        return None
+
+db = init_db()
+
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
 
@@ -13,7 +59,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        fi = open('/home/ncadmin/links', 'rb')
+        fi = open(cfg.pylink_file, 'rb')
         response = BytesIO(fi.read())
         fi.close()
         self.wfile.write(response.getvalue())
@@ -27,14 +73,17 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         response = BytesIO()
         response.write(b'Received: ')
         response.write(body)
-        response.write('\n')
+        response.write(b'\n')
         self.wfile.write(response.getvalue())
-        fo = open('/home/ncadmin/links', "ab")
-        fo.write(urllib.unquote(body[4:]))
+        fo = open(cfg.pylink_file, "ab")
+        fo.write(urllib.parse.unquote(body[4:].decode()).encode())
         fo.write(b'\n')
         fo.close()
+        db.execute("INSERT INTO links (link) VALUES (?)",
+                (str(urllib.parse.unquote(body[4:].decode())),))
+        db.commit()
 
+httpd = HTTPServer(('', cfg.pylink_port), SimpleHTTPRequestHandler)
 
-httpd = HTTPServer(('', 8123), SimpleHTTPRequestHandler)
-httpd.serve_forever()
-
+with contextlib.closing(db):
+    httpd.serve_forever()

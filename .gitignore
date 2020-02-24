@@ -45,7 +45,11 @@ Temporary Items
 #Node Modules
 node_modules
 
+__pycache__
+
 build
 
 config.py
+pylink.db
+links
 
