@@ -1,6 +1,8 @@
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from io import BytesIO
+from bs4 import BeautifulSoup
 import urllib
+import urllib.request
 import config as cfg
 import sqlite3
 from sqlite3 import Error
@@ -45,6 +47,19 @@ def init_db():
         print("Error! Cannot initialize database")
         return None
 
+def read_links():
+    cur = db.cursor()
+    cur.execute("SELECT * FROM links")
+    rows = cur.fetchall()
+
+    links = b''
+
+    for row in rows:
+        formatted_record = row[1] + '|' + row[2]
+        links = links + formatted_record.encode() + b'\n'
+    return links
+
+
 db = init_db()
 
 
@@ -59,9 +74,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        fi = open(cfg.pylink_file, 'rb')
-        response = BytesIO(fi.read())
-        fi.close()
+        response = BytesIO(read_links())
         self.wfile.write(response.getvalue())
 
     def do_POST(self):
@@ -75,12 +88,10 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         response.write(body)
         response.write(b'\n')
         self.wfile.write(response.getvalue())
-        fo = open(cfg.pylink_file, "ab")
-        fo.write(urllib.parse.unquote(body[4:].decode()).encode())
-        fo.write(b'\n')
-        fo.close()
-        db.execute("INSERT INTO links (link) VALUES (?)",
-                (str(urllib.parse.unquote(body[4:].decode())),))
+        url = urllib.parse.unquote(body[4:].decode())
+        soup = BeautifulSoup(urllib.request.urlopen(url).read(), features="lxml")
+        db.execute("INSERT INTO links (link, description) VALUES (?,?)",
+                (str(url),soup.title.string))
         db.commit()
 
 httpd = HTTPServer(('', cfg.pylink_port), SimpleHTTPRequestHandler)
