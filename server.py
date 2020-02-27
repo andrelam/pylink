@@ -89,6 +89,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
         logging.info("POST request,\nPath: %s\nHeaders:\n%s\n\nBody:\n%s\n", str(self.path), str(self.headers), body.decode('utf-8'))
+        # TODO: Validate data before actually saving it
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
